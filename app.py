@@ -1,52 +1,50 @@
 import streamlit as st
-from tiktok_updater import update_username # استيراد الدالة التي كتبناها سابقاً
+from get_tiktok_token import get_tiktok_token
+import requests
 
-# إعداد عنوان الصفحة وتوصيل الأداة
-st.set_page_config(page_title="TikTok Username Changer", layout="wide")
+# إعدادات الواجهة
+st.set_page_config(page_title="مستعرض بيانات تيك توك", page_icon="🎵")
 
-st.title("⚙️ أداة تغيير اسم مستخدم تيك توك")
-st.write("استخدم هذه الأداة لتحديث الـ @Handle الخاص بحسابك على TikTok عبر واجهة برمجة التطبيقات (API).")
+st.title("🎵 عرض بيانات حساب تيك توك")
+st.write("استخدم هذه الأداة لجلب معلومات الحساب عبر API الرسمي.")
 
-# ------------------- المدخلات من المستخدم -------------------
-with st.form("username_update_form"):
-    old_user = st.text_input("1. اسم المستخدم الحالي (Username):", placeholder="أدخل @اسمك القديم")
-    new_user = st.text_input("2. الاسم الجديد المراد تعيينه:", placeholder="أدخل الاسم الذي تريده جديداً")
-    submit_button = st.form_submit_button(label='🚀 بدء عملية التغيير')
+# نموذج إدخال البيانات
+with st.form("user_info_form"):
+    client_id = st.text_input("Client Key:", type="password")
+    client_secret = st.text_input("Client Secret:", type="password")
+    submit_button = st.form_submit_button("🔍 جلب البيانات")
 
-# ------------------- منطق التنفيذ -------------------
 if submit_button:
-    if not old_user or not new_user:
-        st.error("🛑 الرجاء ملء كلا الحقلين (القديم والجديد) للمتابعة.")
+    if not client_id or not client_secret:
+        st.error("❌ الرجاء إدخال الـ Client Key والـ Client Secret!")
     else:
-        st.info(f"⏳ جاري محاولة تغيير الاسم من **{old_user}** إلى **{new_user}**...")
-       # استدعاء دالة التوكن من ملف get_tiktok_token
-        from get_tiktok_token import get_tiktok_token
+        st.info("⏳ جاري الاتصال بـ TikTok API...")
         
-        # حط معلوماتك الخاصة بـ TikTok API هنا
-        client_id = "awt2ygdl113f74a6"
-        client_secret = "zIbDi4KAg4O6k4Wdth3tBWe4fqskh0cc"
+        # 1. الحصول على Access Token
+        token_data = get_tiktok_token(client_id, client_secret)
+        access_token = token_data.get("access_token")
         
-        # الحصول على التوكن
-        token_response = get_tiktok_token(client_id, client_secret)
-        token = token_response.get("access_token", "")
-        
-        # الـ Endpoint المطلوب
-        endpoint = "https://open.tiktokapis.com/v2/user/info/get/"
-        
-        # استدعاء الدالة الرئيسية
-        result = update_username(old_user, new_user, token, endpoint)
-        # استدعاء الدالة الرئيسية من الملف السابق
-        
-        
-    st.subheader("✅ حالة العملية:")
-    if result:
-            st.balloons()
-            st.success("🎉 نجاح! تم تحديث اسم المستخدم بنجاح.")
-    else:
-            st.error("❌ فشل التحديث! تحقق من البيانات أو التوكن.")
-# ------------------- نصائح إضافية -------------------
-st.sidebar.header("💡 ملاحظات هامة")
-st.sidebar.markdown("""
-*   **أهم خطوة:** يجب عليك الحصول على **Access Token** صالح من TikTok أولاً ووضعه في ملف `tiktok_updater.py`.
-*   **التوثيق (API):** هذا الكود يعتمد على نقطة نهاية محددة؛ قد تحتاج إلى مراجعة التوثيق الرسمي لتيك توك إذا فشل الاتصال.
-""")
+        if access_token:
+            # 2. طلب بيانات المستخدم
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+            # الـ Endpoint الرسمي لقراءة البيانات
+            url = "https://open.tiktokapis.com/v2/user/info/get/?fields=open_id,union_id,avatar_url,display_name"
+            
+            response = requests.get(url, headers=headers)
+            res_json = response.json()
+            
+            if response.status_code == 200 and "data" in res_json:
+                user_info = res_json["data"]["user"]
+                st.success("✅ تم جلب البيانات بنجاح!")
+                
+                # عرض البيانات بالواجهة
+                st.image(user_info.get("avatar_url"), width=150)
+                st.subheader(f"الاسم: {user_info.get('display_name')}")
+                st.json(res_json)
+            else:
+                st.error("❌ فشل في جلب البيانات من تيك توك.")
+                st.write("استجابة السيرفر:", res_json)
+        else:
+            st.error("❌ فشل الحصول على Access Token! تحقق من المفاتيح.")
